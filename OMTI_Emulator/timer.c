@@ -17,13 +17,13 @@ volatile uint16_t timer10mS;
 // Timer 10mS
 ISR(TIMER0_COMPA_vect)
 {
-	
+LED1_ON	
 	Input_Timer10mS_Tick();
 	
 	lcd_timer_10mS();	
 
 	mmc_disk_timerproc();	/* Drive timer procedure of low level disk I/O module */
-
+LED1_OFF
 }
 
 

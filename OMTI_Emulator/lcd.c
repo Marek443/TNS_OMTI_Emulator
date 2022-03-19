@@ -1,3 +1,4 @@
+
 #include <stdio.h>
 #include <string.h>
 #include <u8g.h>
@@ -5,6 +6,7 @@
 #include "sd_card.h"
 #include "FatFs/mmc_avr.h"
 #include "Input.h"
+#include "config.h"
 
 /*
  * lcd.c
@@ -239,60 +241,69 @@ uint8_t page_sd_card_ok(void)
 }
 
 
+uint8_t menu_img_id = 0;
 
 
-void file_select(uint8_t index)
+void file_next(char *filename, int len)
 {
-	static uint8_t index_last = 0xff;
-	if(index_last == index) return;
-	index_last = index;
-	
+
 	FRESULT fr;
 	DIR dj;
-	FILINFO fno;	
+	FILINFO fno;
+	uint8_t flag = 0;
 
-	fr = f_findfirst(&dj, &fno, "", "*"); /* Start to search for all files */
+	fr = f_findfirst(&dj, &fno, "", "*");	/* Start to search for all files */
+	while (fr == FR_OK && fno.fname[0]) {   /* Repeat while an item is found */
+		if (!(fno.fattrib & AM_DIR)) {
 
-	printf("index = %u\r\n", index);
-
-	uint8_t file_index = 0;
-	while (fr == FR_OK && fno.fname[0] && (index != file_index)) {         /* Repeat while an item is found */
-		if (fno.fattrib & AM_DIR ) {
-//		printf("%s\\\r\n", fno.fname);	// Print directory name
-		} else {
-//		printf("%s\r\n", fno.fname);                /* Print the file name */
-			fr = f_findnext(&dj, &fno);               /* Search for next item */
+			if(*filename == 0) break;
+			
+			if(!strcmp(fno.fname, filename)) {
+				flag = 1;
+			}
 		}
-		file_index++;
+		
+		fr = f_findnext(&dj, &fno);
+	
+		if(flag) break;
+	}
+
+	
+	if(fr != FR_OK || fno.fname[0] == 0) {
+		f_closedir(&dj);
+		fr = f_findfirst(&dj, &fno, "", "*");
+	}
+
+	if(fr == FR_OK && fno.fname[0]) {
+		strncpy(sys_data.img[menu_img_id].filename, fno.fname, FILENAME_LEN - 1);
+	} else {
+		*sys_data.img[menu_img_id].filename = 0;
 	}
 	
-
-	// Prekresleni obsahu lcd
-	u8g_SetFont(&u8g, u8g_font_9x18);
-	u8g_FirstPage(&u8g);
-	do {
-		u8g_DrawStr(&u8g, 5, 15, fno.fname);
-		
-	} while(u8g_NextPage(&u8g));
-
 	f_closedir(&dj);
-
 }
+
+
 
 void lcd_proc(BUTTONS buttons)
 {
+	uint8_t lcd_update = 0;
 	uint8_t sd_state = sd_card_state();
 	static uint8_t last_sd_state;
-	
+//	LED1_ON
 	// Reset pozice animace SD karty pri zmene stavu
 	if(last_sd_state != sd_state) {
 		last_sd_state = sd_state;
 		animate = 0;
 	}
 	
+	
+//	LED1_OFF
+	
 	if(sd_state == SD_STATE_DISK_OK) {
 
 		if(page_sd_card_ok() == 0) {
+
 			// SD karta je OK, ale jeste se ceka na dokonceni animace
 			return;
 		}
@@ -304,20 +315,46 @@ void lcd_proc(BUTTONS buttons)
 	}
 	
 	
-	static uint8_t file_index = 0;
-
-
 	if(buttons.change & BUTTON_SW1) {
-		if(buttons.value & BUTTON_SW1)	file_index--;
+		if(buttons.value & BUTTON_SW1)	{
+			menu_img_id++;
+			if(menu_img_id >= DRV_NUM) {
+				menu_img_id = 0;
+			}
+			lcd_update = 1;
+		}
 	}
 
 	if(buttons.change & BUTTON_SW2) {
-		if(buttons.value & BUTTON_SW2)	file_index++;
+		if(buttons.value & BUTTON_SW2)	{
+			file_next(sys_data.img[menu_img_id].filename, FILENAME_LEN);
+			sd_open_img(menu_img_id, sys_data.img[menu_img_id].filename);
+			// Pri zmene souboru se vzdy ulozi konfigurace
+			SaveConfig();
+			lcd_update = 1;
+		}
 	}
+	
+	if(!lcd_update) return;
+	
+	u8g_SetFont(&u8g, u8g_font_9x18);
+	u8g_FirstPage(&u8g);
+	
+	char str_tmp[16];
+	sprintf(str_tmp, "IMG %u", menu_img_id + 1);
+	do {
+		u8g_DrawStr(&u8g, 1, 15, str_tmp);
+		u8g_DrawStr(&u8g, 1, 29, sys_data.img[menu_img_id].filename);
+	
+		#define X_SIZE	15
+		#define Y_SIZE	12
 
-	
-	file_select(file_index);	
-	
-	
+		uint8_t i;
+		for(i = 0; i < DRV_NUM; i++) {
+			u8g_DrawFrame(&u8g, 60 + (X_SIZE * i), 3, X_SIZE, Y_SIZE);	
+		}
+		u8g_DrawBox(&u8g, 60 + (X_SIZE * menu_img_id), 3, X_SIZE, Y_SIZE);
+		
+	} while(u8g_NextPage(&u8g));
 }
 

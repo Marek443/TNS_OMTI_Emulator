@@ -14,6 +14,7 @@
 #include "timer.h"
 #include "serial0.h"
 #include "scsi.h"
+#include "config.h"
 #include "sd_card.h"
 #include "lcd.h"
 #include "input.h"
@@ -36,6 +37,7 @@ int main(void)
 
 	lcd_init();
 
+	Config_Init();
 
 	sei();
 
@@ -47,17 +49,20 @@ int main(void)
     while (1) {
 
 		// Nacteni stavu tlacitek
+
 		BUTTONS buttons = GetButtons();
+
+		uint8_t sd_status = sd_card_proc();
+
+		if(sd_status & SD_STATE_CHANGE) {
+			
+			// Spusteni procesu konfigurace pri zmene stavu SD karty
+			Config_Proc(sd_status);
+		}
 
 		scsi_proc();
 	
-		sd_card_proc();
-		
 		lcd_proc(buttons);
-		
-		
-		extern void cfg_proc(BUTTONS buttons);
-		cfg_proc(buttons);
 	
     }
 }

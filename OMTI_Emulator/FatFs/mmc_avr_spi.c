@@ -34,7 +34,7 @@
 #define CS_LOW		PORTB &= ~(1 << CS);			/* Set CS (Chip Select = Slave Select (SS)) low */
 #define	CS_HIGH		PORTB |=  (1 << CS);			/* Set CS high */
 #define MMC_CD		(!(PINB & (1 << CARD_DETECT)))		/* Test if card detected. yes:true, no:false, default:true */ 
-#define MMC_WP		(!(PINB & (1 << CARD_WP)))			/* Write Lock enable. (yes true , no false, default: false) */
+#define MMC_WP		((PINB & (1 << CARD_WP)))			/* Write Lock enable. (yes true , no false, default: false) */
 
 /*--------------------------------------------------------------------------
 

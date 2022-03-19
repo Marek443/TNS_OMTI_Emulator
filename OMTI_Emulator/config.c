@@ -16,10 +16,10 @@
 #include "config.h"
 
 
-static char buf[256];
+// Struktura konfigurace a hodnot systemu
+SYS_DATA sys_data;
 
-FIL Fil_CFG;			/* File object needed for each open file */
-
+FIL Fil_CFG;					/* File object needed for each open file */
 
 //***************************************************************************************
 // Nacteni parametru konfigurace se souboru CONFIG_FILE ulozeneho na SD karte
@@ -27,13 +27,14 @@ FIL Fil_CFG;			/* File object needed for each open file */
 // param_name ... jmeno parametru
 // fp         ... ukazatel na soubor konfigurace
 // param_name ... jmeno paramatru
-// buff       ... pracovni buffer
-// len        ... velikost pracovniho bufferu
-// return     ... ukazatel na hodnotu hledaneho parametru, 0 pri chybe
+// dst        ... cilova pamet pro nactenou hodnotu
+// maxlen     ... velikost ciloveho bufferu
+// return     ... 1 = OK, 0 pri chybe
 //***************************************************************************************
-char *GetCfgParam(FIL *fp, const char *param_name, char *buff, int len)
+static uint8_t GetCfgParam(FIL *fp, const char *param_name, char *dst, int maxlen)
 {
 	char *pTmp;
+	char buff[256];		/* Pracovni buffer, pozor na velikost stacku */ 
 
 	// Ukazatel na zacatek souboru
 	f_lseek(fp, 0);
@@ -41,7 +42,7 @@ char *GetCfgParam(FIL *fp, const char *param_name, char *buff, int len)
 	while(f_eof(&Fil_CFG) == 0) {
 
 		// Nacteni jednoho radku ze souboru
-		f_gets(buff, len, &Fil_CFG);
+		f_gets(buff, sizeof(buff), &Fil_CFG);
 		
 		// Komentaze nebrat
 		if(*buff == '#' || *buff == '/') continue;
@@ -65,17 +66,33 @@ char *GetCfgParam(FIL *fp, const char *param_name, char *buff, int len)
 
 				// Ziskani pozice '=' v nactenem radku
 				pTmp = strchr(pTmp, '=');
-				if(!pTmp) return 0;
-
+				if(!pTmp) {
+					printf("GetCfgParam: parameter \"%s\" without value\r\n", param_name);
+					return 0;
+				}
 				// Po preskoceni mezer a tabulatoru za '=' mame hotovo
 				while(*pTmp++) {
-					if((*pTmp != ' ') || (*pTmp != '\t'))  return pTmp;
+					if((*pTmp != ' ') || (*pTmp != '\t'))  {
+						strncpy(dst, pTmp, maxlen - 1);
+						printf("GetCfgParam: %s=%s\r\n", param_name, dst);
+						return 1;
+					}
 				}
 			}
 		}
 	}
+	
+	printf("GetCfgParam: parameter \"%s\" not found\r\n", param_name);
 	return 0;
 }
+
+
+void Config_Init(void)
+{
+	memset((char*)&sys_data, 0, sizeof(sys_data));
+}
+
+
 
 
 //***************************************************************************************
@@ -85,42 +102,53 @@ char *GetCfgParam(FIL *fp, const char *param_name, char *buff, int len)
 // value      ... hodnota parametru
 // return     ... 0 = OK, CFG_ERROR(0xff) = chyba
 //***************************************************************************************
-uint8_t SaveConfig(const char *param_name, char *value)
+void SaveConfig(void)
 {
-	return 0;	
+	// Otevreni souboru konfigurace
+	FRESULT fr = f_open (&Fil_CFG, CONFIG_FILE, FA_WRITE | FA_CREATE_ALWAYS );
+
+	printf("SaveConfig, fr = %x\r\n", fr);
+	if(fr != FR_OK) return;
+
+	uint8_t i;
+	for(i = 0; i < DRV_NUM; i++) {
+		f_printf(&Fil_CFG, "filename%u=%s\r\n", i + 1, sys_data.img[i].filename);
+	}
+	
+	f_close(&Fil_CFG);
 }
 
 
-void cfg_proc(BUTTONS buttons)
+void Config_Proc(uint8_t sd_status)
 {
-	if(buttons.change & BUTTON_SW1) {
-		if(buttons.value & BUTTON_SW1)	{
-			
-	
-		FRESULT fr;
-		char *pValue;
-		
-		// Otevreni souboru konfigurace
-		fr = f_open (&Fil_CFG, CONFIG_FILE, FA_READ | FA_OPEN_EXISTING );
-		if(fr != FR_OK) return;
-	
-	
-		pValue = GetCfgParam(&Fil_CFG, "rpm", buf, sizeof(buf));
-		printf("rpm = %s\r\n", pValue ? pValue : "");
-	
-		pValue = GetCfgParam(&Fil_CFG, "mode", buf, sizeof(buf));
-		printf("mode = %s\r\n", pValue ? pValue : "");
+	if((sd_status & SD_STATE_DISK_OK) == 0) {
+		// SD karta neni ready, tak rychle pryc
+		return; 
+	}
 
-		pValue = GetCfgParam(&Fil_CFG, "heads", buf, sizeof(buf));
-		printf("heads = %s\r\n", pValue ? pValue : "");
-		
-		f_close(&Fil_CFG);
-			
-		}
-		
-		
-	}	
+	Config_Init();
+
+	// Nacteni konfigurace a inicializace systemu
+	printf("Config Load\r\n");
+
+	// Otevreni souboru konfigurace
+	FRESULT fr = f_open (&Fil_CFG, CONFIG_FILE, FA_READ | FA_OPEN_EXISTING );
+	if(fr != FR_OK) {
+		printf("Nepodarilo se otevrit soubor konfigurace \"" CONFIG_FILE "\"\r\n");
+		return;
+	}
+
+	uint8_t i;
+	char val_name[16];
+	for(i = 0; i < DRV_NUM; i++) {
+		sprintf(val_name, "filename%u", i + 1);
+		GetCfgParam(&Fil_CFG, val_name, sys_data.img[i].filename, FILENAME_LEN);
+
+		sd_open_img(i, sys_data.img[i].filename);
+
+	}
 	
+	f_close(&Fil_CFG);
 }
 
 

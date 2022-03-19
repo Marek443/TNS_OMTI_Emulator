@@ -3,6 +3,7 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include "serial0.h"
+#include "board.h"
 
 /* RXD0  - PD0 */
 /* TXD0  - PD1 */
@@ -10,15 +11,15 @@
 // *****************************************************************************
 // Konfigurace serioveho bufferu
 // *****************************************************************************
-#define TX_UART0_BUF_SIZE	128
+#define TX_UART0_BUF_SIZE	2048
 #define TX_UART0_MASK			(TX_UART0_BUF_SIZE - 1)
 #define RX_UART0_BUF_SIZE	128
 #define RX_UART0_MASK			(RX_UART0_BUF_SIZE - 1)
 
 
 volatile static uint8_t		uart0_TxBuf[TX_UART0_BUF_SIZE];
-volatile static uint8_t		uart0_TxHead = 0;
-volatile static uint8_t		uart0_TxTail = 0;
+volatile static uint16_t	uart0_TxHead = 0;
+volatile static uint16_t	uart0_TxTail = 0;
 volatile static uint8_t		uart0_RxBuf[RX_UART0_BUF_SIZE];
 volatile static uint8_t		uart0_RxHead = 0;
 volatile static uint8_t		uart0_RxTail = 0;
@@ -93,7 +94,8 @@ int Uart0_PutChar(char c, FILE *fd)
 	// Zjisteni zda je v bufferu misto
 	while(uart0_TxTail == ((uart0_TxHead + 1) & TX_UART0_MASK)) {
 		// ne neni, zahodit znak
-//		return -1;
+LED1
+		return -1;
 	}
 
 	// Vlozeni znaku do bufferu

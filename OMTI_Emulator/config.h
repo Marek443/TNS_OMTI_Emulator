@@ -9,8 +9,23 @@
 #ifndef CONFIG_H_
 #define CONFIG_H_
 
+#include "FatFs/mmc_avr.h"
+#include "sd_card.h"
+
 #define CONFIG_FILE		"config.cfg"		/* Jmeno souboru konfigurace */
 
+#define DRV_NUM			4		/* Pocet emulovanych jednotek */
+#define FILENAME_LEN	128
+
+typedef struct {
+	struct {
+		char filename[FILENAME_LEN];
+		FIL fd;
+	} img[DRV_NUM];
+	
+} SYS_DATA;
+
+extern SYS_DATA sys_data;
 
 struct opt {
 	const char *name;
@@ -27,9 +42,11 @@ int get_next_opt(struct opts *opts);
 #define OPT_eof -1
 #define OPT_section -2
 
-
-uint8_t LoadConfig(const char *param_name, char *value, uint8_t maxlen);
-uint8_t SaveConfig(const char *param_name, char *value);
+void SaveConfig(void);
 #define CFG_ERROR	0xff
+
+
+void Config_Init(void);
+void Config_Proc(uint8_t sd_status);
 
 #endif /* CONFIG_H_ */

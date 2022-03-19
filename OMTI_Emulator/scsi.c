@@ -33,6 +33,9 @@
 // PD5      - I/O			Out
 // PD7      - MSG			Out
 //***********************************************
+
+
+//#define DPRINT(x) printf(x);
 #define DB_INPUT	DDRA = 0x00; DB_PORT = 0x00;
 #define DB_OUTPUT	DDRA = 0xff;
 #define DB_PORT		PORTA
@@ -210,6 +213,8 @@ void scsi_proc(void)
 	static uint8_t selected_device = 0;
 	uint16_t block_size;
 
+fuj:
+
 	// Test RST signalu
 	if(!RST_GET()) {
 		// Reset je aktivni
@@ -220,6 +225,10 @@ void scsi_proc(void)
 
 	// Reset vseho
 	case SCSI_RESET:
+
+//		LED1
+//		LED1
+//		LED1
 
 		BSY_INIT;
 		REQ_INIT;
@@ -244,13 +253,13 @@ void scsi_proc(void)
 	case SCSI_SELECTION:
 	
 		sei();
-//		LED1_OFF
+//		LED1_ON
 	
 		// Cekam na spadovou hranu signalu SEL
 		if(SEL_GET()) break;
 
 		cli();
-//		LED1_ON
+//		LED1_OFF
 		
 		// Huraa spadova hrana SEL uz je tu, precteni PORTu
 		// Zde je id selectovaneho zarizeni
@@ -263,8 +272,9 @@ void scsi_proc(void)
 
 	case SCSI_COMMAND:
 		// Cekam na nabezno hranu signalu SEL
+//LED1_ON
 		if(!SEL_GET()) break;		
-		
+//LED1_OFF		
 		// Nastavenim CD do low to aktivuje doruceni command povelu
 		CD_LO;
 			
@@ -387,10 +397,10 @@ void scsi_proc(void)
 									
 		// READ Command
 		else if(cmd_buffer[0] == 0x08) {
-
+			uint8_t block_count = CMD_READ_GET_BLOCK(cmd_buffer);
 #ifdef DBG
 			printf("lba = %lu\r\n", CMD_READ_GET_LBA(cmd_buffer));
-			printf("block_count = %u\r\n",CMD_READ_GET_BLOCK(cmd_buffer));
+			printf("block_count = %u\r\n", block_count);
 			printf("control = 0x02%x\r\n", CMD_READ_GET_CONTROL(cmd_buffer));
 			printf("Return status = 0x%02x, message = 0x%02x\r\n", cmd_buffer[1] & 0x60, 0);
 #endif			
@@ -402,17 +412,22 @@ void scsi_proc(void)
 				block_size = 512;				
 			}
 
-				sd_read(CMD_GET_LUN(cmd_buffer), CMD_READ_GET_LBA(cmd_buffer) * block_size, block_buffer, block_size);
-
+			uint32_t addr = CMD_READ_GET_LBA(cmd_buffer) * block_size;
+			while(block_count--) {
+				sd_read(CMD_GET_LUN(cmd_buffer), addr, block_buffer, block_size);
+				DataWrite(block_buffer, block_size);
+				addr += block_size; 
+			}
 			
-//			cli();
-			DataWrite(block_buffer, block_size);
 			SendStatAndMsg(cmd_buffer[1] & 0x60, 0x00);
-//			sei();
+
 		} 
 
 		state = SCSI_RESET;		
 		break;
-				
 	}
+
+	if(state != SCSI_SELECTION) goto fuj;
+
+
 }

@@ -18,7 +18,7 @@ void scsi_proc(void);
 //***************************************************************************************
 #define CMD_GET_CMD(buffer) buffer[0]
 #define CMD_GET_LUN(buffer) ((buffer[1] >> 5) & 3)
-#define CMD_READ_GET_LBA(buffer) ((((uint32_t)(buffer[1] & 0x1f)) << 16) | (buffer[2] << 8) | buffer[3])
+#define CMD_READ_GET_LBA(buffer) ( ((((uint32_t)buffer[1]) << 16) & 0x1f0000) |  (((uint16_t)buffer[2] << 8) & 0xff00) | (buffer[3] & 0xff) )
 #define CMD_READ_GET_BLOCK(buffer) buffer[4]
 #define CMD_READ_GET_CONTROL(buffer) buffer[5]
 

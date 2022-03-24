@@ -10,6 +10,9 @@
 #include "FatFs/mmc_avr.h"
 #include "sd_card.h"
 #include "config.h"
+#include "debug.h"
+#include "board.h"
+
 FATFS FatFs;		/* FatFs work area needed for each volume */
 FIL Fil;			/* File object needed for each open file */
 
@@ -33,7 +36,7 @@ void sd_open_img(uint8_t lun, const char *filename)
 {
 	FRESULT fr;
 	if(lun >= 4) return;
-	fr = f_open(&sys_data.img[lun].fd, filename, FA_READ | FA_OPEN_EXISTING );
+	fr = f_open(&sys_data.img[lun].fd, filename, FA_READ | FA_WRITE | FA_OPEN_EXISTING );
 	printf("Open file %s, rc = %d, file size = %lu, LUN = %u\r\n", filename, fr, (uint32_t)f_size (&sys_data.img[lun].fd), lun);
 }
 
@@ -44,13 +47,34 @@ uint8_t sd_read(uint8_t lun, uint32_t addr, uint8_t *buffer, int len)
 	UINT br;
 	f_read(&sys_data.img[lun].fd, buffer, len, &br);
 
-//	printf("sd_read, addr = %lu(0x%lx)", addr, addr);
-
+//	printf("sd_read, addr = %lu(0x%lx), len = %d\r\n", addr, addr, len);
+//	HexPrint(buffer, len, addr);
 	
 	return 0; 
 }
 
 
+uint8_t sd_write(uint8_t lun, uint32_t addr, uint8_t *buffer, int len)
+{
+//LED1_ON;
+	f_lseek(&sys_data.img[lun].fd, addr);
+	UINT br;
+	f_write(&sys_data.img[lun].fd, buffer, len, &br);
+
+//	printf("sd_write, addr = %lu(0x%lx), len = %d\r\n", addr, addr, len);
+//	HexPrint(buffer, len, addr);
+	
+	return 0;	
+}
+
+
+//***************************************************************************************
+// Flush cached data of the writing file
+//***************************************************************************************
+void sd_sync(uint8_t lun)
+{
+	f_sync(&sys_data.img[lun].fd);
+}
 
 
 uint8_t sd_card_proc(void)

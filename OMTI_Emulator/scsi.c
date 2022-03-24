@@ -51,8 +51,8 @@
 #define ACK_GET()	(PINC & (1 << PC6))
 
 #define BSY_INIT	BSY_HI
-#define BSY_LO		DDRC |= (1 << PC2); PORTC &= ~(1 << PC2);
-#define BSY_HI		PORTC |= (1 << PC2); DDRC &= ~(1 << PC2);
+#define BSY_LO		DDRC |= (1 << PC2); PORTC &= ~(1 << PC2); LED1_ON;
+#define BSY_HI		PORTC |= (1 << PC2); DDRC &= ~(1 << PC2); LED1_OFF;
 
 #define REQ_INIT	REQ_HI
 #define REQ_LO		DDRC |= (1 << PC5); PORTC &= ~(1 << PC5);
@@ -77,13 +77,17 @@ uint8_t cmd_buffer[6];
 uint8_t data_buffer[10];
 uint8_t block_buffer[2048];
 
+
 //***************************************************************************************
-// Cteni dat SASI karty
+// Cteni dat SASI karty, TNS posila dat do disku
+//***************************************************************************************
+// 6.9 DATA IN OR OUT PHASE
+// Data OUT WRITE, strana 6-7
+//***************************************************************************************
 // return ... 0 == data OK, cokoli jineho reset
 //***************************************************************************************
-uint8_t DataRead(uint8_t *pData, uint8_t num)
+static uint8_t DataRead(uint8_t *pData, uint16_t num)
 {
-
 	while(num--) {
 
 		// Stazeni REQ signalu, to je povel pro SASI kartu ze muze poslat byte
@@ -180,7 +184,12 @@ uint8_t SendStatAndMsg(uint8_t status_byte, uint8_t message_byte)
 	return 0;	
 }
 
-
+//***************************************************************************************
+// Zapis dat do SASI karty, Disk posila data do TNS
+//***************************************************************************************
+// 6.9 DATA IN OR OUT PHASE
+// Data IN Read, strana 6-7
+//***************************************************************************************
 static uint8_t DataWrite(uint8_t *pData, uint16_t num)
 {
 	// Zbernice do stavu DATA IN READ
@@ -205,12 +214,10 @@ typedef enum {
 } SCSI_STATE;
 
 
-
-
 void scsi_proc(void)
 {
 	static SCSI_STATE state = SCSI_RESET;
-	static uint8_t selected_device = 0;
+	static __attribute__((unused)) uint8_t selected_device = 0;
 	uint16_t block_size;
 
 fuj:
@@ -225,10 +232,6 @@ fuj:
 
 	// Reset vseho
 	case SCSI_RESET:
-
-//		LED1
-//		LED1
-//		LED1
 
 		BSY_INIT;
 		REQ_INIT;
@@ -253,13 +256,11 @@ fuj:
 	case SCSI_SELECTION:
 	
 		sei();
-//		LED1_ON
 	
 		// Cekam na spadovou hranu signalu SEL
 		if(SEL_GET()) break;
 
 		cli();
-//		LED1_OFF
 		
 		// Huraa spadova hrana SEL uz je tu, precteni PORTu
 		// Zde je id selectovaneho zarizeni
@@ -271,10 +272,10 @@ fuj:
 		break;
 
 	case SCSI_COMMAND:
+	
 		// Cekam na nabezno hranu signalu SEL
-//LED1_ON
 		if(!SEL_GET()) break;		
-//LED1_OFF		
+	
 		// Nastavenim CD do low to aktivuje doruceni command povelu
 		CD_LO;
 			
@@ -395,7 +396,7 @@ fuj:
 			
 		}
 									
-		// READ Command
+		// 8.3.6 READ Command (HEX 08) (Sequential Mode only)
 		else if(cmd_buffer[0] == 0x08) {
 			uint8_t block_count = CMD_READ_GET_BLOCK(cmd_buffer);
 #ifdef DBG
@@ -420,14 +421,40 @@ fuj:
 			}
 			
 			SendStatAndMsg(cmd_buffer[1] & 0x60, 0x00);
-
 		} 
+
+		// 8.3.7 WRITE Command (HEX OA)
+		else if(cmd_buffer[0] == 0x0A) {
+			uint8_t block_count = CMD_READ_GET_BLOCK(cmd_buffer);
+#ifdef DBG
+			printf("lba = %lu\r\n", CMD_READ_GET_LBA(cmd_buffer));
+			printf("block_count = %u\r\n", block_count);
+			printf("control = 0x02%x\r\n", CMD_READ_GET_CONTROL(cmd_buffer));
+			printf("Return status = 0x%02x, message = 0x%02x\r\n", cmd_buffer[1] & 0x60, 0);
+#endif
+			if(CMD_GET_LUN(cmd_buffer) < 2) {
+				// HDD
+				block_size = 256;
+			} else {
+				// FDD
+				block_size = 512;
+			}
+
+			uint32_t addr = CMD_READ_GET_LBA(cmd_buffer) * block_size;
+			while(block_count--) {
+				DataRead(block_buffer, block_size);
+				sd_write(CMD_GET_LUN(cmd_buffer), addr, block_buffer, block_size);
+				addr += block_size;
+			}
+			sd_sync(CMD_GET_LUN(cmd_buffer));
+
+			SendStatAndMsg(cmd_buffer[1] & 0x60, 0x00);
+			
+		}
 
 		state = SCSI_RESET;		
 		break;
 	}
 
 	if(state != SCSI_SELECTION) goto fuj;
-
-
 }

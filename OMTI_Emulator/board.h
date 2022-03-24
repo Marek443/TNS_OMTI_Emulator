@@ -1,6 +1,8 @@
 #ifndef _BOARD_H_
 #define _BOARD_H_
 
+#include <avr/io.h>
+
 #define LED1_INIT	DDRD |= (1 << PD6); LED1_OFF	
 #define LED1_ON		PORTD |= (1 << PD6);
 #define LED1_OFF	PORTD &= ~(1 << PD6);
